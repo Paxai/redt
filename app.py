@@ -5,12 +5,17 @@ import os
 app = Flask(__name__)
 
 # Pobieranie klucza API z ENV
-openai.api_key = os.getenv("OPENAI_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise EnvironmentError("Brakuje zmiennej środowiskowej OPENAI_API_KEY")
+
+openai.api_key = OPENAI_API_KEY
 
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
         data = request.get_json()
+        print("[DEBUG] Dane wejściowe:", data)
 
         question = data.get("question")
         answers = data.get("answers")
@@ -20,8 +25,21 @@ def chat():
             return jsonify({"error": "Brakuje pytania lub odpowiedzi"}), 400
 
         messages = [
-            {"role": "system", "content": "Jesteś ekspertem, który pomaga wybierać poprawne odpowiedzi na pytania."},
-            {"role": "user", "content": f"Pytanie: {question}\nOdpowiedzi: {answers}\nCzy można zaznaczyć więcej niż jedną odpowiedź: {'Tak' if multiple else 'Nie'}\nKtóra odpowiedź jest poprawna? Przepisz poprawną odpowiedź lub odpowiedzi (jeśli więcej niż jedna) tak jak były bez cudzysłowów ani nic sam tekst."}
+            {
+                "role": "system",
+                "content": "Jesteś ekspertem, który pomaga wybierać poprawne odpowiedzi na pytania."
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"Pytanie: {question}\n"
+                    f"Odpowiedzi: {answers}\n"
+                    f"Czy można zaznaczyć więcej niż jedną odpowiedź: {'Tak' if multiple else 'Nie'}\n"
+                    f"Która odpowiedź jest poprawna? Przepisz poprawną odpowiedź lub odpowiedzi "
+                    f"(jeśli więcej niż jedna) tak jak były, bez cudzysłowów i bez dodatkowych znaków. "
+                    f"Tylko tekst odpowiedzi."
+                )
+            }
         ]
 
         completion = openai.ChatCompletion.create(
@@ -29,16 +47,18 @@ def chat():
             messages=messages
         )
 
-        content = completion.choices[0].message.content.strip()
+        response_text = completion.choices[0].message.content.strip()
+        print("[DEBUG] Odpowiedź GPT:", response_text)
 
         if multiple:
-            correct_answers = [a.strip() for a in content.split(",")]
+            correct_answers = [a.strip() for a in response_text.split(",") if a.strip()]
         else:
-            correct_answers = [content]
+            correct_answers = [response_text]
 
         return jsonify({"correct_answers": correct_answers})
 
     except Exception as e:
+        print("[ERROR] Błąd serwera:", e)
         return jsonify({"error": str(e)}), 500
 
 
