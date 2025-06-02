@@ -1,16 +1,28 @@
 from flask import Flask, request, jsonify
 import os
 import openai
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = Flask(__name__)
 
+# 🔐 Twój własny klucz do ochrony endpointa (z .env)
+ACCESS_KEY = os.getenv("ACCESS_KEY")
+
+# 🔑 Twój klucz OpenAI z .env
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        data = request.get_json()
+        # Sprawdzenie nagłówka autoryzacji
+        api_key = request.headers.get("X-API-KEY")
+        if api_key != ACCESS_KEY:
+            return jsonify({"error": "Unauthorized – invalid API key"}), 401
 
+        # Dane z requesta
+        data = request.get_json()
         question = data.get("question")
         answers = data.get("answers")
         multiple = data.get("multiple", False)
@@ -29,7 +41,6 @@ def chat():
         )
 
         content = response.choices[0].message.content.strip()
-
         correct_answers = [a.strip() for a in content.split(",")] if multiple else [content]
 
         return jsonify({"correct_answers": correct_answers})
